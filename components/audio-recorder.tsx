@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import type React from "react"
 
@@ -44,6 +44,13 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
   const router = useRouter()
   const [rows, setRows] = useState<RowItem[]>([])
   const [hasDirectoryAccess, setHasDirectoryAccess] = useState<boolean>(false)
+  const [zoom, setZoom] = useState<number>(() => {
+    if (typeof window === "undefined") return 1
+    const raw = window.localStorage.getItem("audioRecorderZoom")
+    const parsed = raw ? Number.parseFloat(raw) : NaN
+    if (!Number.isFinite(parsed)) return 1
+    return Math.min(2, Math.max(0.6, parsed))
+  })
   const inputRefs = useRef<{ [key: string]: HTMLInputElement }>({})
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const pendingFocusRequest = useRef<{ id: string; caretPosition?: number; selectAll?: boolean } | null>(null)
@@ -75,8 +82,106 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
   >(null)
   const [newCategoryOpen, setNewCategoryOpen] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState("")
+  const [focusedResourceId, setFocusedResourceId] = useState<string | null>(null)
 
   const rowsKey = categoryId ? `audioRecorderRows::${categoryId}` : "audioRecorderRows"
+  const ZOOM_KEY = "audioRecorderZoom"
+
+  const clampZoom = useCallback((value: number) => Math.min(2, Math.max(0.6, value)), [])
+
+  const adjustZoom = useCallback((delta: number) => {
+    setZoom((prev) => clampZoom(prev + delta))
+  }, [clampZoom])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ZOOM_KEY, String(zoom))
+    } catch {}
+  }, [zoom, ZOOM_KEY])
+
+  const loadRowsFromStorage = useCallback((key: string): RowItem[] => {
+    try {
+      const raw = localStorage.getItem(key)
+      if (!raw) return []
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return []
+      return parsed.map((item: any) => {
+        const mapResources = (input: any[] | undefined): ResourceItem[] =>
+          Array.isArray(input)
+            ? input.map((res: any) => ({
+                id: String(res?.id ?? ""),
+                name: typeof res?.name === "string" ? res.name : "",
+                link: typeof res?.link === "string" ? res.link : undefined,
+              }))
+            : []
+
+        return {
+          id: String(item?.id ?? ""),
+          name: typeof item?.name === "string" ? item.name : "",
+          checked: Boolean(item?.checked),
+          link: typeof item?.link === "string" ? item.link : undefined,
+          resources: {
+            videos: mapResources(item?.resources?.videos),
+            trueFalse: mapResources(item?.resources?.trueFalse),
+            quizzes: mapResources(item?.resources?.quizzes),
+          },
+        }
+      })
+    } catch {
+      return []
+    }
+  }, [])
+
+  const getRowsForSlug = useCallback(
+    (slug: string): RowItem[] => {
+      if ((slug === "__root__" && !categoryId) || slug === categoryId) {
+        return rows
+      }
+      const key = slug === "__root__" ? "audioRecorderRows" : `audioRecorderRows::${slug}`
+      return loadRowsFromStorage(key)
+    },
+    [categoryId, loadRowsFromStorage, rows],
+  )
+
+  const exportDataToJS = useCallback(() => {
+    try {
+      const categories = getCategories()
+      const slugs = ["__root__", ...categories]
+      const pages: Array<Record<string, string>> = []
+
+      slugs.forEach((slug) => {
+        const slugRows = getRowsForSlug(slug)
+        if (!slugRows || slugRows.length === 0) return
+        const cleanedNames = slugRows
+          .map((row) => (row?.name ?? "").trim())
+          .filter((name) => name.length > 0)
+        if (cleanedNames.length === 0) return
+
+        const pageNumber = String(pages.length + 1)
+        const pageData: Record<string, string> = { page: pageNumber }
+        cleanedNames.forEach((name, idx) => {
+          pageData[`fila ${idx + 1}`] = name
+        })
+        pages.push(pageData)
+      })
+
+      if (pages.length === 0) return
+
+      const fileBody = `export default ${JSON.stringify(pages, null, 2)};\n`
+      const blob = new Blob([fileBody], { type: "application/javascript;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `notas-${Date.now()}.js`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      console.log("[v0] ExportaciÃ³n completada", pages.length, "pÃ¡ginas")
+    } catch (error) {
+      console.error("[v0] No se pudo exportar datos", error)
+    }
+  }, [getCategories, getRowsForSlug])
 
   const hasMeaningfulContent = useMemo(() => {
     if (!rows || rows.length === 0) return false
@@ -92,7 +197,7 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
     })
   }, [rows])
 
-  // Timers para mantener abierto el menú del tacho durante 2s al salir con el mouse
+  // Timers para mantener abierto el menÃº del tacho durante 2s al salir con el mouse
   const rowMenuTimerRef = useRef<NodeJS.Timeout | null>(null)
   const resMenuTimerRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -147,7 +252,7 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
     setHoverTrashResource(null)
   }, [])
 
-  // ---- Categorías: lista, navegación y creación automática ----
+  // ---- CategorÃ­as: lista, navegaciÃ³n y creaciÃ³n automÃ¡tica ----
   const CATEGORIES_KEY = "audioRecorderCategories"
 
   const getCategories = useCallback((): string[] => {
@@ -305,7 +410,7 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
     try {
       router.push(`/c/${slug}`)
     } catch (e) {
-      console.error("[v0] No se pudo navegar a la categoría", e)
+      console.error("[v0] No se pudo navegar a la categorÃ­a", e)
     }
   }
 
@@ -340,7 +445,7 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
     }
 
     checkExistingAccess()
-  }, [])
+  }, [loadDataFromLocalStorage])
 
   useEffect(() => {
     const focusRequest = pendingFocusRequest.current
@@ -418,40 +523,141 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
   }, [rows, activeResourceModal])
 
   useEffect(() => {
+    if (!activeResourceModal) {
+      if (focusedResourceId !== null) setFocusedResourceId(null)
+      return
+    }
+    if (activeResourceList.length === 0) {
+      if (focusedResourceId !== null) setFocusedResourceId(null)
+      return
+    }
+    const exists = focusedResourceId
+      ? activeResourceList.some((item) => item.id === focusedResourceId)
+      : false
+    if (!exists) {
+      setFocusedResourceId(activeResourceList[0].id)
+    }
+  }, [activeResourceModal, activeResourceList, focusedResourceId])
+
+  useEffect(() => {
+    if (!focusedResourceId) return
+    const el = resourceCardRefs.current[focusedResourceId]
+    if (!el) return
+    try {
+      if (typeof el.focus === "function") el.focus()
+    } catch {}
+    try {
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" })
+    } catch {}
+  }, [focusedResourceId])
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "+") {
+      const activeElement = document.activeElement as HTMLElement | null
+      const isInInput = !!activeElement && (activeElement.tagName === "INPUT" || activeElement.isContentEditable)
+      const isModifier = event.ctrlKey || event.metaKey
+      const key = event.key
+
+      if ((key === "+" || key === "=") && isModifier) {
+        event.preventDefault()
+        adjustZoom(0.1)
+        return
+      }
+
+      if ((key === "-" || key === "_") && isModifier) {
+        event.preventDefault()
+        adjustZoom(-0.1)
+        return
+      }
+
+      if (key === "0" && isModifier) {
+        event.preventDefault()
+        setZoom(1)
+        return
+      }
+
+      if ((key === "ArrowDown" || key === "ArrowUp") && activeResourceModal) {
+        if (isInInput) return
+        event.preventDefault()
+        if (activeResourceList.length === 0) return
+        const currentIndex = focusedResourceId
+          ? activeResourceList.findIndex((item) => item.id === focusedResourceId)
+          : -1
+        if (key === "ArrowDown") {
+          const nextIndex = currentIndex >= activeResourceList.length - 1 ? activeResourceList.length - 1 : currentIndex + 1
+          setFocusedResourceId(activeResourceList[nextIndex]?.id ?? null)
+        } else {
+          const nextIndex = currentIndex <= 0 ? 0 : currentIndex - 1
+          setFocusedResourceId(activeResourceList[nextIndex]?.id ?? null)
+        }
+        setEditingResource(null)
+        return
+      }
+
+      if (key === "+" || key === "=") {
         event.preventDefault()
         if (activeResourceModal && hasDirectoryAccess) {
           addResourceItem(activeResourceModal.rowId, activeResourceModal.type)
         } else if (hasDirectoryAccess) {
           addRow()
         }
+        return
       }
-      if (event.key === "Enter") {
-        event.preventDefault()
-        if (!hasDirectoryAccess) {
-          requestDirectoryAccess()
+
+      if (key === "Enter") {
+        if (activeResourceModal && !isInInput) {
+          event.preventDefault()
+          if (focusedResourceId) {
+            pendingResourceFocus.current = {
+              key: `${activeResourceModal.rowId}:${activeResourceModal.type}:${focusedResourceId}`,
+              selectAll: true,
+            }
+            setEditingResource({
+              rowId: activeResourceModal.rowId,
+              type: activeResourceModal.type,
+              resId: focusedResourceId,
+            })
+          }
+        } else {
+          event.preventDefault()
+          if (!hasDirectoryAccess) {
+            requestDirectoryAccess()
+          }
         }
+        return
       }
-      if (event.key === "ArrowRight") {
+
+      if (key === "ArrowRight") {
         event.preventDefault()
         navigateRelativeCategory(1)
+        return
       }
-      if (event.key === "ArrowLeft") {
+
+      if (key === "ArrowLeft") {
         event.preventDefault()
         navigateRelativeCategory(-1)
+        return
       }
-      if (event.key === "Escape") {
-        // Cierra cualquier menú de tacho abierto para no bloquear la navegación
+
+      if (key === "Escape") {
+        // Cierra cualquier menu de tacho abierto para no bloquear la navegacion
         forceCloseRowTrashMenu()
         forceCloseResTrashMenu()
+        return
       }
-      if (event.key.toLowerCase() === "h") {
-        const ae = document.activeElement as HTMLElement | null
-        const isInInput = !!ae && (ae.tagName === "INPUT" || ae.isContentEditable)
+
+      if (key.toLowerCase() === "h") {
         if (!isInInput && !activeResourceModal && !linkEditor) {
           event.preventDefault()
           setArchivedOpen(true)
+        }
+        return
+      }
+
+      if (key.toLowerCase() === "e") {
+        if (!isInInput && !activeResourceModal && !linkEditor) {
+          event.preventDefault()
+          exportDataToJS()
         }
       }
     }
@@ -465,8 +671,15 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
     navigateRelativeCategory,
     forceCloseRowTrashMenu,
     forceCloseResTrashMenu,
+    adjustZoom,
+    addResourceItem,
+    addRow,
+    exportDataToJS,
+    setZoom,
+    focusedResourceId,
+    setEditingResource,
+    activeResourceList,
   ])
-
   const requestDirectoryAccess = async () => {
     console.log("[v0] Configurando acceso a carpeta local")
     localStorage.setItem("directoryAccessGranted", "true")
@@ -511,7 +724,7 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
     }
   }, [rows, hasDirectoryAccess, saveToStorage])
 
-  const addRow = () => {
+  const addRow = useCallback(() => {
     const newRowId = Date.now().toString()
 
     pendingFocusRequest.current = { id: newRowId, selectAll: true }
@@ -533,7 +746,7 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
 
       return updatedRows
     })
-  }
+  }, [hasDirectoryAccess, saveToStorage])
 
   const openResourceModal = (
     rowId: string,
@@ -542,7 +755,7 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
     setActiveResourceModal({ rowId, type })
   }
 
-  const addResourceItem = (
+  const addResourceItem = useCallback((
     rowId: string,
     type: "videos" | "trueFalse" | "quizzes",
   ) => {
@@ -561,7 +774,15 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
       if (hasDirectoryAccess) saveToStorage(updated)
       return updated
     })
-  }
+  }, [hasDirectoryAccess, saveToStorage])
+
+  const resourceCardRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
+
+  const activeResourceList = useMemo(() => {
+    if (!activeResourceModal) return [] as ResourceItem[]
+    const row = rows.find((r) => r.id === activeResourceModal.rowId)
+    return row?.resources?.[activeResourceModal.type] ?? []
+  }, [activeResourceModal, rows])
 
   const updateResourceName = (
     rowId: string,
@@ -611,7 +832,7 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
     }
   }
 
-  const deleteResourceItem = (
+  const deleteResourceItem = useCallback((
     rowId: string,
     type: "videos" | "trueFalse" | "quizzes",
     resId: string,
@@ -626,7 +847,7 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
       if (hasDirectoryAccess) saveToStorage(updated)
       return updated
     })
-  }
+  }, [hasDirectoryAccess, saveToStorage])
 
   const handleResourceRowClick = (
     e: React.MouseEvent,
@@ -739,12 +960,14 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
       ) : (
         <>
           <div className="space-y-3">
-            {rows.filter((r) => !r.checked).map((row) => (
-              <Card
-                key={row.id}
-                className="p-4 bg-card border-border cursor-pointer"
-                onClick={(e) => handleRowClick(e, row.id)}
-              >
+            {rows.filter((r) => !r.checked).map((row) => {
+              const rowHasLink = typeof row.link === "string" && row.link.trim().length > 0
+              return (
+                <Card
+                  key={row.id}
+                  className="p-4 bg-card border-border cursor-pointer"
+                  onClick={(e) => handleRowClick(e, row.id)}
+                >
                 <div className="flex items-center gap-4">
                   <input
                     type="checkbox"
@@ -788,12 +1011,14 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
                     )}
                   </div>
 
-                  {/* se elimina información redundante de enlace */}
+                  {/* se elimina informaciÃ³n redundante de enlace */}
 
                   <div className="ml-auto">
                   <DropdownMenu
-                    open={hoverTrashRowId === row.id}
-                    onOpenChange={(open) => (open ? openRowTrashMenu(row.id) : forceCloseRowTrashMenu())}
+                    open={rowHasLink && hoverTrashRowId === row.id}
+                    onOpenChange={(open) =>
+                      open && rowHasLink ? openRowTrashMenu(row.id) : forceCloseRowTrashMenu()
+                    }
                   >
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -806,13 +1031,18 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
                         size="sm"
                         className="text-muted-foreground hover:text-destructive"
                         data-interactive
-                        onMouseEnter={() => openRowTrashMenu(row.id)}
+                        onMouseEnter={() => rowHasLink && openRowTrashMenu(row.id)}
                         onMouseLeave={scheduleCloseRowTrashMenu}
                         onKeyDown={(e) => {
                           if (e.key === "ArrowDown") {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, link: undefined } : r)))
+                            if (rowHasLink) {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              setRows((prev) =>
+                                prev.map((r) => (r.id === row.id ? { ...r, link: undefined } : r)),
+                              )
+                              forceCloseRowTrashMenu()
+                            }
                             return
                           }
                           if (e.key === "ArrowUp") {
@@ -827,23 +1057,27 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      className="w-44"
-                      onMouseEnter={() => openRowTrashMenu(row.id)}
-                      onMouseLeave={scheduleCloseRowTrashMenu}
-                    >
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, link: undefined } : r)))
-                          forceCloseRowTrashMenu()
-                        }}
+                    {rowHasLink ? (
+                      <DropdownMenuContent
+                        align="end"
+                        className="w-44"
+                        onMouseEnter={() => openRowTrashMenu(row.id)}
+                        onMouseLeave={scheduleCloseRowTrashMenu}
                       >
-                        Borrar URL
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setRows((prev) =>
+                              prev.map((r) => (r.id === row.id ? { ...r, link: undefined } : r)),
+                            )
+                            forceCloseRowTrashMenu()
+                          }}
+                        >
+                          Borrar URL
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    ) : null}
                   </DropdownMenu>
                   </div>
                 </div>
@@ -901,8 +1135,9 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
                     {row.resources?.quizzes?.length ?? 0}
                   </span>
                 </div>
-              </Card>
-            ))}
+                </Card>
+              )
+            })}
           </div>
 
           {rows.length === 0 && (
@@ -917,11 +1152,11 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
 
       {/* Modales de recursos */}
       <Dialog open={!!activeResourceModal} onOpenChange={(open) => !open && setActiveResourceModal(null)}>
-        <DialogContent className="p-0 max-h-[80vh] h-[80vh] w-[90vw] max-w-4xl overflow-hidden">
+        <DialogContent className="p-0 max-h-[70vh] h-[70vh] w-[85vw] max-w-3xl overflow-hidden">
           {activeResourceModal && (
             <>
               <div className="flex flex-col h-full max-h-full">
-                <div className="p-6 border-b">
+                <div className="px-5 py-4 border-b">
                   <DialogHeader>
                     <DialogTitle>
                       {activeResourceModal.type === "videos" && "Videos"}
@@ -934,7 +1169,10 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
                   </DialogHeader>
                 </div>
 
-                <div className="p-3 border-b flex items-center justify-end gap-2">
+                <div className="px-5 py-3 border-b flex items-center justify-between gap-3">
+                  <span className="text-sm text-muted-foreground">
+                    {activeResourceList.length} recurso{activeResourceList.length === 1 ? "" : "s"}
+                  </span>
                   <Button
                     variant="outline"
                     size="sm"
@@ -944,12 +1182,23 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
                   </Button>
                 </div>
 
-                <div className="p-3 flex-1 overflow-y-auto space-y-2">
-                  {(rows.find((r) => r.id === activeResourceModal.rowId)?.resources?.[activeResourceModal.type] ?? []).map(
-                    (res) => (
+                <div className="px-5 py-3 flex-1 overflow-y-auto space-y-1.5">
+                  {activeResourceList.map((res) => {
+                    const resourceHasLink = typeof res.link === "string" && res.link.trim().length > 0
+                    const isFocused = focusedResourceId === res.id
+                    return (
                       <Card
                         key={res.id}
-                        className="p-3 bg-card border-border cursor-pointer"
+                        ref={(el) => {
+                          if (el) resourceCardRefs.current[res.id] = el
+                          else delete resourceCardRefs.current[res.id]
+                        }}
+                        tabIndex={-1}
+                        data-selected={isFocused ? "true" : undefined}
+                        aria-selected={isFocused}
+                        className={`py-2.5 px-3 bg-card border-border cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40 transition-colors ${
+                          isFocused ? "border-primary/60 ring-1 ring-primary/40 bg-card/90" : ""
+                        }`}
                         onClick={(e) =>
                           handleResourceRowClick(
                             e,
@@ -959,178 +1208,187 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
                           )
                         }
                       >
-                      <div className="flex items-center gap-3">
-                        <div className="flex-none max-w-[240px] min-w-[120px]">
-                          {editingResource &&
-                          editingResource.rowId === activeResourceModal.rowId &&
-                          editingResource.type === activeResourceModal.type &&
-                          editingResource.resId === res.id ? (
-                            <Input
-                              ref={(el) => {
-                                const key = `${activeResourceModal.rowId}:${activeResourceModal.type}:${res.id}`
-                                if (el) resourceInputRefs.current[key] = el
-                                else delete resourceInputRefs.current[key]
-                              }}
-                              value={res.name}
-                              onChange={(e) =>
-                                updateResourceName(
-                                  activeResourceModal.rowId,
-                                  activeResourceModal.type,
-                                  res.id,
-                                  e.target.value,
-                                )
-                              }
-                              onKeyDown={(e) =>
-                                handleResourceInputKeyDown(
-                                  e,
-                                  activeResourceModal.rowId,
-                                  activeResourceModal.type,
-                                  res.id,
-                                )
-                              }
-                              onBlur={() => setEditingResource(null)}
-                              placeholder="Nombre del recurso"
-                              className="bg-transparent border-0 shadow-none focus-visible:ring-0 focus-visible:border-transparent w-full"
-                            />
-                          ) : (
-                            <button
-                              className="text-left truncate w-full text-foreground/90 hover:text-foreground"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setEditingResource({
-                                  rowId: activeResourceModal.rowId,
-                                  type: activeResourceModal.type,
-                                  resId: res.id,
-                                })
-                              }}
-                              aria-label="Editar nombre de recurso"
-                            >
-                              {res.name || "Sin nombre"}
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="ml-auto">
-                          <DropdownMenu
-                            open={
-                              !!(
-                                hoverTrashResource &&
-                                activeResourceModal &&
-                                hoverTrashResource.rowId === activeResourceModal.rowId &&
-                                hoverTrashResource.type === activeResourceModal.type &&
-                                hoverTrashResource.resId === res.id
-                              )
-                            }
-                            onOpenChange={(open) => {
-                              if (!activeResourceModal) return
-                              if (open) {
-                                openResTrashMenu(
-                                  activeResourceModal.rowId,
-                                  activeResourceModal.type,
-                                  res.id,
-                                )
-                              } else {
-                                forceCloseResTrashMenu()
-                              }
-                            }}
-                          >
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  if (!activeResourceModal) return
-                                  deleteResourceItem(
+                        <div className="flex items-center gap-3">
+                          <div className="flex-none max-w-[240px] min-w-[120px]">
+                            {editingResource &&
+                            editingResource.rowId === activeResourceModal.rowId &&
+                            editingResource.type === activeResourceModal.type &&
+                            editingResource.resId === res.id ? (
+                              <Input
+                                ref={(el) => {
+                                  const key = `${activeResourceModal.rowId}:${activeResourceModal.type}:${res.id}`
+                                  if (el) resourceInputRefs.current[key] = el
+                                  else delete resourceInputRefs.current[key]
+                                }}
+                                value={res.name}
+                                onChange={(e) =>
+                                  updateResourceName(
+                                    activeResourceModal.rowId,
+                                    activeResourceModal.type,
+                                    res.id,
+                                    e.target.value,
+                                  )
+                                }
+                                onKeyDown={(e) =>
+                                  handleResourceInputKeyDown(
+                                    e,
                                     activeResourceModal.rowId,
                                     activeResourceModal.type,
                                     res.id,
                                   )
-                                  forceCloseResTrashMenu()
+                                }
+                                onBlur={() => setEditingResource(null)}
+                                placeholder="Nombre del recurso"
+                                className="bg-transparent border-0 shadow-none focus-visible:ring-0 focus-visible:border-transparent w-full"
+                              />
+                            ) : (
+                              <button
+                                className="text-left truncate w-full text-foreground/90 hover:text-foreground"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setEditingResource({
+                                    rowId: activeResourceModal.rowId,
+                                    type: activeResourceModal.type,
+                                    resId: res.id,
+                                  })
                                 }}
-                                variant="outline"
-                                size="sm"
-                                className="text-muted-foreground hover:text-destructive"
-                                onMouseEnter={() => {
-                                  if (!activeResourceModal) return
+                                aria-label="Editar nombre de recurso"
+                              >
+                                {res.name || "Sin nombre"}
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="ml-auto flex items-center gap-2">
+                            <DropdownMenu
+                              open={
+                                resourceHasLink &&
+                                !!(
+                                  hoverTrashResource &&
+                                  activeResourceModal &&
+                                  hoverTrashResource.rowId === activeResourceModal.rowId &&
+                                  hoverTrashResource.type === activeResourceModal.type &&
+                                  hoverTrashResource.resId === res.id
+                                )
+                              }
+                              onOpenChange={(open) => {
+                                if (!activeResourceModal) return
+                                if (open && resourceHasLink) {
                                   openResTrashMenu(
                                     activeResourceModal.rowId,
                                     activeResourceModal.type,
                                     res.id,
                                   )
-                                }}
-                                onMouseLeave={scheduleCloseResTrashMenu}
-                                onKeyDown={(e) => {
-                                  if (!activeResourceModal) return
-                                  if (e.key === "ArrowDown") {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    const { rowId, type } = activeResourceModal
-                                    setRows((prev) =>
-                                      prev.map((r) => {
-                                        if (r.id !== rowId) return r
-                                        const resources = r.resources ?? { videos: [], trueFalse: [], quizzes: [] }
-                                        const list = resources[type].map((it) => (it.id === res.id ? { ...it, link: undefined } : it))
-                                        return { ...r, resources: { ...resources, [type]: list } }
-                                      }),
-                                    )
-                                    return
-                                  }
-                                  if (e.key === "ArrowUp") {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    deleteResourceItem(activeResourceModal.rowId, activeResourceModal.type, res.id)
-                                  }
-                                }}
-                                aria-label="Opciones de borrado"
-                                title="Borrar"
-                              >
-                                <Trash2 className="size-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                              align="end"
-                              className="w-44"
-                              onMouseEnter={() => {
-                                if (!activeResourceModal) return
-                                openResTrashMenu(
-                                  activeResourceModal.rowId,
-                                  activeResourceModal.type,
-                                  res.id,
-                                )
-                              }}
-                              onMouseLeave={scheduleCloseResTrashMenu}
-                            >
-                              <DropdownMenuItem
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                  const { rowId, type } = activeResourceModal!
-                                  setRows((prev) =>
-                                    prev.map((r) => {
-                                      if (r.id !== rowId) return r
-                                      const resources = r.resources ?? { videos: [], trueFalse: [], quizzes: [] }
-                                      const list = resources[type].map((it) => (it.id === res.id ? { ...it, link: undefined } : it))
-                                      return { ...r, resources: { ...resources, [type]: list } }
-                                    }),
-                                  )
+                                } else {
                                   forceCloseResTrashMenu()
-                                }}
-                              >
-                                Borrar URL
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                                }
+                              }}
+                            >
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (!activeResourceModal) return
+                                    deleteResourceItem(
+                                      activeResourceModal.rowId,
+                                      activeResourceModal.type,
+                                      res.id,
+                                    )
+                                    forceCloseResTrashMenu()
+                                  }}
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-muted-foreground hover:text-destructive"
+                                  onMouseEnter={() => {
+                                    if (!activeResourceModal || !resourceHasLink) return
+                                    openResTrashMenu(
+                                      activeResourceModal.rowId,
+                                      activeResourceModal.type,
+                                      res.id,
+                                    )
+                                  }}
+                                  onMouseLeave={scheduleCloseResTrashMenu}
+                                  onKeyDown={(e) => {
+                                    if (!activeResourceModal) return
+                                    if (e.key === "ArrowDown") {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      if (resourceHasLink) {
+                                        const { rowId, type } = activeResourceModal
+                                        setRows((prev) =>
+                                          prev.map((r) => {
+                                            if (r.id !== rowId) return r
+                                            const resources = r.resources ?? { videos: [], trueFalse: [], quizzes: [] }
+                                            const list = resources[type].map((it) =>
+                                              it.id === res.id ? { ...it, link: undefined } : it,
+                                            )
+                                            return { ...r, resources: { ...resources, [type]: list } }
+                                          }),
+                                        )
+                                        forceCloseResTrashMenu()
+                                      }
+                                      return
+                                    }
+                                    if (e.key === "ArrowUp") {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      deleteResourceItem(activeResourceModal.rowId, activeResourceModal.type, res.id)
+                                    }
+                                  }}
+                                  aria-label="Opciones de borrado"
+                                  title="Borrar"
+                                >
+                                  <Trash2 className="size-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              {resourceHasLink ? (
+                                <DropdownMenuContent
+                                  align="end"
+                                  className="w-44"
+                                  onMouseEnter={() => {
+                                    if (!activeResourceModal) return
+                                    openResTrashMenu(
+                                      activeResourceModal.rowId,
+                                      activeResourceModal.type,
+                                      res.id,
+                                    )
+                                  }}
+                                  onMouseLeave={scheduleCloseResTrashMenu}
+                                >
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      const { rowId, type } = activeResourceModal!
+                                      setRows((prev) =>
+                                        prev.map((r) => {
+                                          if (r.id !== rowId) return r
+                                          const resources = r.resources ?? { videos: [], trueFalse: [], quizzes: [] }
+                                          const list = resources[type].map((it) =>
+                                            it.id === res.id ? { ...it, link: undefined } : it,
+                                          )
+                                          return { ...r, resources: { ...resources, [type]: list } }
+                                        }),
+                                      )
+                                      forceCloseResTrashMenu()
+                                    }}
+                                  >
+                                    Borrar URL
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              ) : null}
+                            </DropdownMenu>
+                          </div>
                         </div>
-                      </div>
                       </Card>
-                    ),
-                  )}
-                  {(rows.find((r) => r.id === activeResourceModal.rowId)?.resources?.[activeResourceModal.type]?.length ?? 0) ===
-                    0 && (
-                    <div className="text-center py-8 text-muted-foreground select-none">
+                    )
+                  })
+                  {activeResourceList.length === 0 && (
+                    <div className="text-center py-6 text-muted-foreground select-none">
                       <p>
                         No hay recursos. Presiona
                         <kbd className="bg-muted px-2 py-1 rounded text-xs mx-1">+</kbd>
-                        o usa el botón "Agregar".
+                        o usa el botÃ³n "Agregar".
                       </p>
                     </div>
                   )}
@@ -1254,17 +1512,17 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
         </DialogContent>
       </Dialog>
 
-      {/* Crear nueva página/categoría (ArrowRight) */}
+      {/* Crear nueva pÃ¡gina/categorÃ­a (ArrowRight) */}
       <Dialog open={newCategoryOpen} onOpenChange={setNewCategoryOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Nueva categoría/materia</DialogTitle>
-            <DialogDescription>Escribe un nombre para crear una nueva página</DialogDescription>
+            <DialogTitle>Nueva categorÃ­a/materia</DialogTitle>
+            <DialogDescription>Escribe un nombre para crear una nueva pÃ¡gina</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <Input
               autoFocus
-              placeholder="Nombre de la categoría"
+              placeholder="Nombre de la categorÃ­a"
               value={newCategoryName}
               onChange={(e) => setNewCategoryName(e.target.value)}
               className="bg-transparent border-0 shadow-none focus-visible:ring-0 focus-visible:border-transparent"
@@ -1287,3 +1545,7 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
     </div>
   )
 }
+
+
+
+
