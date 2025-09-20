@@ -968,173 +968,173 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
                   className="p-4 bg-card border-border cursor-pointer"
                   onClick={(e) => handleRowClick(e, row.id)}
                 >
-                <div className="flex items-center gap-4">
-                  <input
-                    type="checkbox"
-                    checked={row.checked}
-                    onChange={() => toggleChecked(row.id)}
-                    className="size-4 accent-primary"
-                    data-interactive
-                  />
+                  <div className="flex items-center gap-4">
+                    <input
+                      type="checkbox"
+                      checked={row.checked}
+                      onChange={() => toggleChecked(row.id)}
+                      className="size-4 accent-primary"
+                      data-interactive
+                    />
 
-                  <div className="flex-1 min-w-0">
-                    {editingRowId === row.id ? (
-                      <Input
-                        ref={(el) => {
-                          if (el) {
-                            inputRefs.current[row.id] = el
-                          } else {
-                            delete inputRefs.current[row.id]
-                          }
-                        }}
-                        value={row.name}
-                        onChange={(e) => updateRowName(row.id, e.target.value)}
-                        onKeyDown={(e) => handleInputKeyDown(e, row.id)}
-                        onBlur={() => setEditingRowId(null)}
-                        className="bg-transparent border-0 shadow-none focus-visible:ring-0 focus-visible:border-transparent text-foreground w-full"
-                        placeholder="Nombre"
-                        data-interactive
-                      />
-                    ) : (
-                      <button
-                        className="text-left truncate w-full text-foreground/90 hover:text-foreground"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setEditingRowId(row.id)
-                          pendingFocusRequest.current = { id: row.id, selectAll: true }
-                        }}
-                        data-interactive
-                        aria-label="Editar nombre"
-                      >
-                        {row.name || "Sin nombre"}
-                      </button>
-                    )}
-                  </div>
-
-                  {/* se elimina informaciÃ³n redundante de enlace */}
-
-                  <div className="ml-auto">
-                  <DropdownMenu
-                    open={rowHasLink && hoverTrashRowId === row.id}
-                    onOpenChange={(open) =>
-                      open && rowHasLink ? openRowTrashMenu(row.id) : forceCloseRowTrashMenu()
-                    }
-                  >
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          deleteRow(row.id)
-                          forceCloseRowTrashMenu()
-                        }}
-                        variant="outline"
-                        size="sm"
-                        className="text-muted-foreground hover:text-destructive"
-                        data-interactive
-                        onMouseEnter={() => rowHasLink && openRowTrashMenu(row.id)}
-                        onMouseLeave={scheduleCloseRowTrashMenu}
-                        onKeyDown={(e) => {
-                          if (e.key === "ArrowDown") {
-                            if (rowHasLink) {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              setRows((prev) =>
-                                prev.map((r) => (r.id === row.id ? { ...r, link: undefined } : r)),
-                              )
-                              forceCloseRowTrashMenu()
+                    <div className="flex-1 min-w-0">
+                      {editingRowId === row.id ? (
+                        <Input
+                          ref={(el) => {
+                            if (el) {
+                              inputRefs.current[row.id] = el
+                            } else {
+                              delete inputRefs.current[row.id]
                             }
-                            return
-                          }
-                          if (e.key === "ArrowUp") {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            deleteRow(row.id)
-                          }
-                        }}
-                        aria-label="Opciones de borrado"
-                        title="Borrar"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    {rowHasLink ? (
-                      <DropdownMenuContent
-                        align="end"
-                        className="w-44"
-                        onMouseEnter={() => openRowTrashMenu(row.id)}
-                        onMouseLeave={scheduleCloseRowTrashMenu}
-                      >
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            setRows((prev) =>
-                              prev.map((r) => (r.id === row.id ? { ...r, link: undefined } : r)),
-                            )
-                            forceCloseRowTrashMenu()
                           }}
+                          value={row.name}
+                          onChange={(e) => updateRowName(row.id, e.target.value)}
+                          onKeyDown={(e) => handleInputKeyDown(e, row.id)}
+                          onBlur={() => setEditingRowId(null)}
+                          className="bg-transparent border-0 shadow-none focus-visible:ring-0 focus-visible:border-transparent text-foreground w-full"
+                          placeholder="Nombre"
+                          data-interactive
+                        />
+                      ) : (
+                        <button
+                          className="text-left truncate w-full text-foreground/90 hover:text-foreground"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setEditingRowId(row.id)
+                            pendingFocusRequest.current = { id: row.id, selectAll: true }
+                          }}
+                          data-interactive
+                          aria-label="Editar nombre"
                         >
-                          Borrar URL
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    ) : null}
-                  </DropdownMenu>
-                  </div>
-                </div>
+                          {row.name || "Sin nombre"}
+                        </button>
+                      )}
+                    </div>
 
-                <div className="mt-3 flex items-center gap-3 pl-8" data-interactive>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="size-7"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      openResourceModal(row.id, "videos")
-                    }}
-                    data-interactive
-                    title="Videos"
-                    aria-label="Videos"
-                  >
-                    <Video className="size-3.5" />
-                  </Button>
-                  <span className="text-[10px] text-muted-foreground min-w-4 text-center">
-                    {row.resources?.videos?.length ?? 0}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="size-7"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      openResourceModal(row.id, "trueFalse")
-                    }}
-                    data-interactive
-                    title="Verdadero/Falso"
-                    aria-label="Verdadero o Falso"
-                  >
-                    <CheckSquare className="size-3.5" />
-                  </Button>
-                  <span className="text-[10px] text-muted-foreground min-w-4 text-center">
-                    {row.resources?.trueFalse?.length ?? 0}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="size-7"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      openResourceModal(row.id, "quizzes")
-                    }}
-                    data-interactive
-                    title="Cuestionarios"
-                    aria-label="Cuestionarios"
-                  >
-                    <HelpCircle className="size-3.5" />
-                  </Button>
-                  <span className="text-[10px] text-muted-foreground min-w-4 text-center">
-                    {row.resources?.quizzes?.length ?? 0}
-                  </span>
-                </div>
+                    {/* se elimina informacion redundante de enlace */}
+
+                    <div className="ml-auto">
+                      <DropdownMenu
+                        open={rowHasLink && hoverTrashRowId === row.id}
+                        onOpenChange={(open) =>
+                          open && rowHasLink ? openRowTrashMenu(row.id) : forceCloseRowTrashMenu()
+                        }
+                      >
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              deleteRow(row.id)
+                              forceCloseRowTrashMenu()
+                            }}
+                            variant="outline"
+                            size="sm"
+                            className="text-muted-foreground hover:text-destructive"
+                            data-interactive
+                            onMouseEnter={() => rowHasLink && openRowTrashMenu(row.id)}
+                            onMouseLeave={scheduleCloseRowTrashMenu}
+                            onKeyDown={(e) => {
+                              if (e.key === "ArrowDown") {
+                                if (rowHasLink) {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  setRows((prev) =>
+                                    prev.map((r) => (r.id === row.id ? { ...r, link: undefined } : r)),
+                                  )
+                                  forceCloseRowTrashMenu()
+                                }
+                                return
+                              }
+                              if (e.key === "ArrowUp") {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                deleteRow(row.id)
+                              }
+                            }}
+                            aria-label="Opciones de borrado"
+                            title="Borrar"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        {rowHasLink ? (
+                          <DropdownMenuContent
+                            align="end"
+                            className="w-44"
+                            onMouseEnter={() => openRowTrashMenu(row.id)}
+                            onMouseLeave={scheduleCloseRowTrashMenu}
+                          >
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                setRows((prev) =>
+                                  prev.map((r) => (r.id === row.id ? { ...r, link: undefined } : r)),
+                                )
+                                forceCloseRowTrashMenu()
+                              }}
+                            >
+                              Borrar URL
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        ) : null}
+                      </DropdownMenu>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex items-center gap-3 pl-8" data-interactive>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="size-7"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openResourceModal(row.id, "videos")
+                      }}
+                      data-interactive
+                      title="Videos"
+                      aria-label="Videos"
+                    >
+                      <Video className="size-3.5" />
+                    </Button>
+                    <span className="text-[10px] text-muted-foreground min-w-4 text-center">
+                      {row.resources?.videos?.length ?? 0}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="size-7"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openResourceModal(row.id, "trueFalse")
+                      }}
+                      data-interactive
+                      title="Verdadero/Falso"
+                      aria-label="Verdadero o Falso"
+                    >
+                      <CheckSquare className="size-3.5" />
+                    </Button>
+                    <span className="text-[10px] text-muted-foreground min-w-4 text-center">
+                      {row.resources?.trueFalse?.length ?? 0}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="size-7"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openResourceModal(row.id, "quizzes")
+                      }}
+                      data-interactive
+                      title="Cuestionarios"
+                      aria-label="Cuestionarios"
+                    >
+                      <HelpCircle className="size-3.5" />
+                    </Button>
+                    <span className="text-[10px] text-muted-foreground min-w-4 text-center">
+                      {row.resources?.quizzes?.length ?? 0}
+                    </span>
+                  </div>
                 </Card>
               )
             })}
@@ -1545,7 +1545,4 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
     </div>
   )
 }
-
-
-
 
