@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -77,6 +77,20 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
   const [newCategoryName, setNewCategoryName] = useState("")
 
   const rowsKey = categoryId ? `audioRecorderRows::${categoryId}` : "audioRecorderRows"
+
+  const hasMeaningfulContent = useMemo(() => {
+    if (!rows || rows.length === 0) return false
+    return rows.some((row) => {
+      const nameFilled = (row.name ?? "").trim().length > 0
+      const linkFilled = typeof row.link === "string" && row.link.trim().length > 0
+      const resources = row.resources
+      const hasResources = !!resources &&
+        ((resources.videos && resources.videos.length > 0) ||
+          (resources.trueFalse && resources.trueFalse.length > 0) ||
+          (resources.quizzes && resources.quizzes.length > 0))
+      return nameFilled || linkFilled || hasResources || row.checked
+    })
+  }, [rows])
 
   // Timers para mantener abierto el menú del tacho durante 2s al salir con el mouse
   const rowMenuTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -190,7 +204,7 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
           return
         }
         if (list.length > 0) router.push(`/c/${list[0]}`)
-        else createAndNavigateToNewCategory()
+        else if (hasMeaningfulContent) createAndNavigateToNewCategory()
         return
       }
       const idx = list.indexOf(categoryId)
@@ -202,13 +216,23 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
       if (nextIndex >= 0 && nextIndex < list.length) {
         router.push(`/c/${list[nextIndex]}`)
       } else if (direction === 1 && nextIndex >= list.length) {
+        if (!hasMeaningfulContent) return
         createAndNavigateToNewCategory()
       } else if (direction === -1 && nextIndex < 0) {
         // Permite volver a la nota inicial '/'
         router.push(`/`)
       }
     },
-    [activeResourceModal, linkEditor, getCategories, router, categoryId, ensureCategoryPresent, createAndNavigateToNewCategory],
+    [
+      activeResourceModal,
+      linkEditor,
+      getCategories,
+      router,
+      categoryId,
+      ensureCategoryPresent,
+      createAndNavigateToNewCategory,
+      hasMeaningfulContent,
+    ],
   )
 
   const handleCreateCategory = () => {
@@ -371,7 +395,14 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [hasDirectoryAccess, activeResourceModal, linkEditor])
+  }, [
+    hasDirectoryAccess,
+    activeResourceModal,
+    linkEditor,
+    navigateRelativeCategory,
+    forceCloseRowTrashMenu,
+    forceCloseResTrashMenu,
+  ])
 
   const requestDirectoryAccess = async () => {
     console.log("[v0] Configurando acceso a carpeta local")
