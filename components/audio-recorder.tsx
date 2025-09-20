@@ -179,9 +179,65 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
     [getCategories, saveCategories],
   )
 
+  const deleteCategory = useCallback(
+    (slug: string) => {
+      if (!slug) return
+      const list = getCategories()
+      const filtered = list.filter((item) => item !== slug)
+      if (filtered.length !== list.length) {
+        saveCategories(filtered)
+      }
+      try {
+        localStorage.removeItem(`audioRecorderRows::${slug}`)
+      } catch {}
+    },
+    [getCategories, saveCategories],
+  )
+
+  const cleanEmptyCategories = useCallback(() => {
+    try {
+      const list = getCategories()
+      let changed = false
+      const filtered: string[] = []
+      for (const slug of list) {
+        if (!slug) continue
+        if (slug === categoryId) {
+          filtered.push(slug)
+          continue
+        }
+        const key = `audioRecorderRows::${slug}`
+        const raw = localStorage.getItem(key)
+        if (!raw) {
+          localStorage.removeItem(key)
+          changed = true
+          continue
+        }
+        try {
+          const parsed = JSON.parse(raw)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            filtered.push(slug)
+          } else {
+            localStorage.removeItem(key)
+            changed = true
+          }
+        } catch {
+          localStorage.removeItem(key)
+          changed = true
+        }
+      }
+      if (changed) {
+        saveCategories(filtered)
+      }
+    } catch {}
+  }, [categoryId, getCategories, saveCategories])
+
   useEffect(() => {
     if (categoryId) ensureCategoryPresent(categoryId)
   }, [categoryId, ensureCategoryPresent])
+
+  useEffect(() => {
+    cleanEmptyCategories()
+  }, [cleanEmptyCategories])
 
   const createAndNavigateToNewCategory = useCallback(() => {
     const slug = `nota-${Date.now()}`
@@ -214,12 +270,18 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
       }
       const nextIndex = idx + direction
       if (nextIndex >= 0 && nextIndex < list.length) {
+        if (categoryId && !hasMeaningfulContent) deleteCategory(categoryId)
         router.push(`/c/${list[nextIndex]}`)
       } else if (direction === 1 && nextIndex >= list.length) {
-        if (!hasMeaningfulContent) return
+        if (!hasMeaningfulContent) {
+          if (categoryId) deleteCategory(categoryId)
+          router.push(`/`)
+          return
+        }
         createAndNavigateToNewCategory()
       } else if (direction === -1 && nextIndex < 0) {
         // Permite volver a la nota inicial '/'
+        if (categoryId && !hasMeaningfulContent) deleteCategory(categoryId)
         router.push(`/`)
       }
     },
@@ -232,6 +294,7 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
       ensureCategoryPresent,
       createAndNavigateToNewCategory,
       hasMeaningfulContent,
+      deleteCategory,
     ],
   )
 
