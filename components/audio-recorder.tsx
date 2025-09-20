@@ -95,7 +95,7 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
     rowMenuTimerRef.current = setTimeout(() => {
       setHoverTrashRowId(null)
       rowMenuTimerRef.current = null
-    }, 2000)
+    }, 500)
   }, [])
 
   const forceCloseRowTrashMenu = useCallback(() => {
@@ -122,7 +122,7 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
     resMenuTimerRef.current = setTimeout(() => {
       setHoverTrashResource(null)
       resMenuTimerRef.current = null
-    }, 2000)
+    }, 500)
   }, [])
 
   const forceCloseResTrashMenu = useCallback(() => {
@@ -203,6 +203,9 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
         router.push(`/c/${list[nextIndex]}`)
       } else if (direction === 1 && nextIndex >= list.length) {
         createAndNavigateToNewCategory()
+      } else if (direction === -1 && nextIndex < 0) {
+        // Permite volver a la nota inicial '/'
+        router.push(`/`)
       }
     },
     [activeResourceModal, linkEditor, getCategories, router, categoryId, ensureCategoryPresent, createAndNavigateToNewCategory],
@@ -350,6 +353,11 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
       if (event.key === "ArrowLeft") {
         event.preventDefault()
         navigateRelativeCategory(-1)
+      }
+      if (event.key === "Escape") {
+        // Cierra cualquier menú de tacho abierto para no bloquear la navegación
+        forceCloseRowTrashMenu()
+        forceCloseResTrashMenu()
       }
       if (event.key.toLowerCase() === "h") {
         const ae = document.activeElement as HTMLElement | null
@@ -691,7 +699,7 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
                   <div className="ml-auto">
                   <DropdownMenu
                     open={hoverTrashRowId === row.id}
-                    onOpenChange={(open) => (open ? openRowTrashMenu(row.id) : scheduleCloseRowTrashMenu())}
+                    onOpenChange={(open) => (open ? openRowTrashMenu(row.id) : forceCloseRowTrashMenu())}
                   >
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -928,13 +936,22 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
                                   res.id,
                                 )
                               } else {
-                                scheduleCloseResTrashMenu()
+                                forceCloseResTrashMenu()
                               }
                             }}
                           >
                             <DropdownMenuTrigger asChild>
                               <Button
-                                onClick={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (!activeResourceModal) return
+                                  deleteResourceItem(
+                                    activeResourceModal.rowId,
+                                    activeResourceModal.type,
+                                    res.id,
+                                  )
+                                  forceCloseResTrashMenu()
+                                }}
                                 variant="outline"
                                 size="sm"
                                 className="text-muted-foreground hover:text-destructive"
@@ -1005,16 +1022,6 @@ export function AudioRecorder({ categoryId = "" }: { categoryId?: string }) {
                                 }}
                               >
                                 Borrar URL
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                  deleteResourceItem(activeResourceModal!.rowId, activeResourceModal!.type, res.id)
-                                  forceCloseResTrashMenu()
-                                }}
-                              >
-                                Borrar fila
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
